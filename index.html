@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>愛車メーター ファネル分析 2025</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <!-- Simple-statistics for AR model -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simple-statistics/7.8.3/simple-statistics.min.js"></script>
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-light: #ebefff;
+            --secondary: #7209b7;
+            --secondary-light: #f3e8fb;
+            --success: #38b000;
+            --success-light: #eafbe8;
+            --warning: #f48c06;
+            --warning-light: #fff5e8;
+            --danger: #e5383b;
+            --danger-light: #ffe8e9;
+            --light: #f8f9fa;
+            --dark: #212529;
+            --gray: #6c757d;
+            --light-gray: #e9ecef;
+            --white: #ffffff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f5f7fa;
+            padding-bottom: 50px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: var(--white);
+            padding: 40px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header-content {
+            flex: 1;
+        }
+        
+        .header-img {
+            max-width: 150px;
+            margin-left: 20px;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        section {
+            margin-bottom: 40px;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--primary);
+            color: var(--primary);
+            font-weight: 500;
+        }
+        
+        .card {
+            background-color: var(--white);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .card-title {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: var(--dark);
+            font-weight: 500;
+        }
+        
+        .grid {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .grid-2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .grid-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+        
+        .chart-container {
+            height: 350px;
+            position: relative;
+        }
+        
+        .process-chart-container {
+            height: 500px;
+            position: relative;
+        }
+        
+        .bottleneck-container {
+            background-color: var(--danger-light);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid var(--danger);
+        }
+        
+        .bottleneck-title {
+            font-size: 1.1rem;
+            color: var(--danger);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .bottleneck-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--danger);
+            margin-bottom: 5px;
+        }
+        
+        .bottleneck-description {
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.9rem;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--light-gray);
+        }
+        
+        th {
+            background-color: var(--light);
+            font-weight: 500;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        tr:hover {
+            background-color: #eef2ff;
+        }
+        
+        .top-kpi-list {
+            list-style-type: none;
+        }
+        
+        .top-kpi-item {
+            padding: 15px;
+            margin-bottom: 10px;
+            background-color: var(--white);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            display: grid;
+            grid-template-columns: 100px 1fr 1fr 1fr 1fr 1fr;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .kpi-item-date {
+            font-weight: 500;
+        }
+        
+        .kpi-item-label {
+            font-size: 0.8rem;
+            color: var(--gray);
+            display: block;
+            margin-bottom: 2px;
+        }
+        
+        .kpi-item-value {
+            font-weight: 500;
+            font-size: 1.1rem;
+            color: var(--primary);
+        }
+        
+        .kpi-item-value.good {
+            color: var(--success);
+        }
+        
+        .kpi-item-value.bad {
+            color: var(--danger);
+        }
+        
+        .kpi-item-value.neutral {
+            color: var(--warning);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 50px;
+            padding: 20px;
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+        
+        .process-explanation {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: var(--primary-light);
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .formula {
+            background-color: var(--light);
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 5px 0;
+            font-family: monospace;
+            display: block;
+        }
+        
+        .legend-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+        
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+            margin-right: 5px;
+        }
+        
+        @media (max-width: 1024px) {
+            .grid-3 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .section-title {
+                font-size: 1.3rem;
+            }
+            
+            .process-chart-container {
+                height: 600px;
+            }
+            
+            .top-kpi-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .kpi-group {
+                display: flex;
+                gap: 15px;
+                flex-wrap: wrap;
+            }
+            
+            .kpi-group-item {
+                flex: 1;
+                min-width: 120px;
+            }
+            
+            header .container {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .header-img {
+                margin-left: 0;
+                margin-top: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <h1>愛車メーター ファネル分析</h1>
+                <div class="subtitle">2025年2月7日 〜 2025年3月8日</div>
+            </div>
+            <div class="header-img">
+                <!-- Placeholder for a car meter icon or logo -->
+                <svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="50" cy="50" r="45" stroke="white" stroke-width="3" fill="none"/>
+                    <path d="M50 10 L50 20" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M90 50 L80 50" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M50 90 L50 80" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M10 50 L20 50" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M50 50 L75 25" stroke="white" stroke-width="3" stroke-linecap="round"/>
+                    <circle cx="50" cy="50" r="5" fill="white"/>
+                </svg>
+            </div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <section>
+            <h2 class="section-title">KPI（主要指標）</h2>
+            <div class="card">
+                <h3 class="card-title">主要KPI指標</h3>
+                <div class="chart-container">
+                    <canvas id="kpiChart"></canvas>
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2 class="section-title">プロセス数値</h2>
+            <div class="process-explanation">
+                <p>このセクションでは、ユーザーがサービスを利用する各段階の数値を表示しています。指定された計算式は以下の通りです：</p>
+                <span class="formula">正常に結果表示できた数 = 結果表示ボタンを押した数 - 金額が出ず、概算査定フォームに遷移した数 + 「該当する選択肢がない場合はこちら」を押した数</span>
+                <span class="formula">結果表示できなかった数 = 結果表示ボタンを押した数 - 正常に結果表示できた数</span>
+                <span class="formula">概算完了数 = 結果表示できなかった数 - 金額が出ず、概算査定フォームから申し込んだ数</span>
+            </div>
+            <div class="card">
+                <h3 class="card-title">ユーザーフロープロセス</h3>
+                <div class="process-chart-container">
+                    <canvas id="processChart"></canvas>
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2 class="section-title">離脱率分析</h2>
+            <div class="card">
+                <h3 class="card-title">各プロセスの離脱率</h3>
+                <div class="chart-container">
+                    <canvas id="dropoffChart"></canvas>
+                </div>
+                <div class="bottleneck-container">
+                    <h4 class="bottleneck-title">主要ボトルネック</h4>
+                    <div class="bottleneck-value">正常に結果表示 → 保存ボタン押下 (82.75%)</div>
+                    <div class="bottleneck-description">21,866人中18,095人がこのステップで離脱</div>
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2 class="section-title">時系列分析</h2>
+            <div class="card">
+                <h3 class="card-title">週ごとの結果保存数と正式査定依頼数の傾向</h3>
+                <div class="chart-container">
+                    <canvas id="timeSeriesChart"></canvas>
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2 class="section-title">直近のKPI数値実績TOP5</h2>
+            <div class="card">
+                <h3 class="card-title">パフォーマンス上位5日</h3>
+                <ul class="top-kpi-list">
+                    <!-- Top 5 KPI items will be populated by JavaScript -->
+                </ul>
+            </div>
+        </section>
+        
+        <section>
+            <h2 class="section-title">今週のトレンド（予測）</h2>
+            <div class="card">
+                <h3 class="card-title">ARモデルによる需要予測</h3>
+                <div class="chart-container">
+                    <canvas id="predictiveChart"></canvas>
+                </div>
+                <div class="legend-container">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: rgba(67, 97, 238, 0.7);"></div>
+                        <span>実績値</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: rgba(67, 97, 238, 0.3);"></div>
+                        <span>予測値</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <div class="footer">
+            <p>© 2025 愛車メーターファネル分析レポート | 分析期間: 2025年2月7日〜2025年3月8日</p>
+        </div>
+    </div>
+    
+    <script>
+        // Raw data from CSV
+        const rawData = [
+            { date: '2025-03-08', access: 0, displayButton: 0, saveButton: 0, actuallySaved: 0, formalAssessment: 0, requestedAssessment: 0, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 0 },
+            { date: '2025-03-07', access: 0, displayButton: 0, saveButton: 0, actuallySaved: 37, formalAssessment: 17, requestedAssessment: 1, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 0 },
+            { date: '2025-03-06', access: 594, displayButton: 531, saveButton: 110, actuallySaved: 111, formalAssessment: 41, requestedAssessment: 14, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 14 },
+            { date: '2025-03-05', access: 652, displayButton: 595, saveButton: 118, actuallySaved: 118, formalAssessment: 49, requestedAssessment: 11, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 19 },
+            { date: '2025-03-04', access: 608, displayButton: 556, saveButton: 99, actuallySaved: 99, formalAssessment: 40, requestedAssessment: 16, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 16 },
+            { date: '2025-03-03', access: 686, displayButton: 628, saveButton: 109, actuallySaved: 109, formalAssessment: 42, requestedAssessment: 16, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 24 },
+            { date: '2025-03-02', access: 835, displayButton: 779, saveButton: 158, actuallySaved: 162, formalAssessment: 83, requestedAssessment: 35, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 16 },
+            { date: '2025-03-01', access: 780, displayButton: 706, saveButton: 120, actuallySaved: 117, formalAssessment: 65, requestedAssessment: 30, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 26 },
+            { date: '2025-02-28', access: 725, displayButton: 668, saveButton: 117, actuallySaved: 123, formalAssessment: 45, requestedAssessment: 21, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 24 },
+            { date: '2025-02-27', access: 909, displayButton: 848, saveButton: 172, actuallySaved: 167, formalAssessment: 47, requestedAssessment: 16, noAmountTransition: 0, noAmountApplication: 0, noOptionButton: 27 },
+            { date: '2025-02-26', access: 884, displayButton: 816, saveButton: 147, actuallySaved: 156, formalAssessment: 50, requestedAssessment: 15, noAmountTransition: 4, noAmountApplication: 1, noOptionButton: 26 },
+            { date: '2025-02-25', access: 797, displayButton: 739, saveButton: 138, actuallySaved: 136, formalAssessment: 51, requestedAssessment: 18, noAmountTransition: 87, noAmountApplication: 10, noOptionButton: 21 },
+            { date: '2025-02-24', access: 770, displayButton: 702, saveButton: 134, actuallySaved: 137, formalAssessment: 52, requestedAssessment: 15, noAmountTransition: 86, noAmountApplication: 19, noOptionButton: 19 },
+            { date: '2025-02-23', access: 737, displayButton: 669, saveButton: 148, actuallySaved: 150, formalAssessment: 51, requestedAssessment: 22, noAmountTransition: 68, noAmountApplication: 14, noOptionButton: 15 },
+            { date: '2025-02-22', access: 932, displayButton: 842, saveButton: 153, actuallySaved: 155, formalAssessment: 54, requestedAssessment: 24, noAmountTransition: 98, noAmountApplication: 17, noOptionButton: 36 },
+            { date: '2025-02-21', access: 553, displayButton: 507, saveButton: 81, actuallySaved: 78, formalAssessment: 29, requestedAssessment: 14, noAmountTransition: 55, noAmountApplication: 12, noOptionButton: 18 },
+            { date: '2025-02-20', access: 600, displayButton: 547, saveButton: 102, actuallySaved: 103, formalAssessment: 39, requestedAssessment: 13, noAmountTransition: 54, noAmountApplication: 7, noOptionButton: 26 },
+            { date: '2025-02-19', access: 739, displayButton: 682, saveButton: 122, actuallySaved: 127, formalAssessment: 49, requestedAssessment: 24, noAmountTransition: 79, noAmountApplication: 15, noOptionButton: 23 },
+            { date: '2025-02-18', access: 938, displayButton: 860, saveButton: 158, actuallySaved: 164, formalAssessment: 52, requestedAssessment: 12, noAmountTransition: 93, noAmountApplication: 17, noOptionButton: 27 },
+            { date: '2025-02-17', access: 977, displayButton: 882, saveButton: 156, actuallySaved: 155, formalAssessment: 45, requestedAssessment: 14, noAmountTransition: 75, noAmountApplication: 19, noOptionButton: 34 },
+            { date: '2025-02-16', access: 1807, displayButton: 1658, saveButton: 220, actuallySaved: 225, formalAssessment: 71, requestedAssessment: 27, noAmountTransition: 144, noAmountApplication: 23, noOptionButton: 20 },
+            { date: '2025-02-15', access: 1177, displayButton: 1072, saveButton: 126, actuallySaved: 131, formalAssessment: 50, requestedAssessment: 28, noAmountTransition: 104, noAmountApplication: 18, noOptionButton: 14 },
+            { date: '2025-02-14', access: 697, displayButton: 628, saveButton: 74, actuallySaved: 73, formalAssessment: 28, requestedAssessment: 11, noAmountTransition: 58, noAmountApplication: 8, noOptionButton: 20 },
+            { date: '2025-02-13', access: 896, displayButton: 820, saveButton: 121, actuallySaved: 114, formalAssessment: 42, requestedAssessment: 16, noAmountTransition: 74, noAmountApplication: 19, noOptionButton: 20 },
+            { date: '2025-02-12', access: 921, displayButton: 846, saveButton: 98, actuallySaved: 109, formalAssessment: 42, requestedAssessment: 11, noAmountTransition: 92, noAmountApplication: 16, noOptionButton: 21 },
+            { date: '2025-02-11', access: 947, displayButton: 862, saveButton: 130, actuallySaved: 124, formalAssessment: 51, requestedAssessment: 24, noAmountTransition: 87, noAmountApplication: 24, noOptionButton: 18 },
+            { date: '2025-02-10', access: 805, displayButton: 737, saveButton: 118, actuallySaved: 121, formalAssessment: 50, requestedAssessment: 20, noAmountTransition: 77, noAmountApplication: 19, noOptionButton: 13 },
+            { date: '2025-02-09', access: 1330, displayButton: 1224, saveButton: 208, actuallySaved: 214, formalAssessment: 78, requestedAssessment: 36, noAmountTransition: 117, noAmountApplication: 31, noOptionButton: 32 },
+            { date: '2025-02-08', access: 1622, displayButton: 1507, saveButton: 217, actuallySaved: 220, formalAssessment: 81, requestedAssessment: 34, noAmountTransition: 127, noAmountApplication: 28, noOptionButton: 35 },
+            { date: '2025-02-07', access: 1081, displayButton: 994, saveButton: 117, actuallySaved: 114, formalAssessment: 44, requestedAssessment: 19, noAmountTransition: 96, noAmountApplication: 16, noOptionButton: 32 }
+        ];
+        
+        // Process data and calculate derived metrics
+        const processedData = rawData.map(item => {
+            // Calculate derived metrics based on the given formulas
+            const normallyDisplayed = item.displayButton - item.noAmountTransition + item.noOptionButton;
+            const notDisplayed = item.displayButton - normallyDisplayed;
+            const estimationCompleted = notDisplayed - item.noAmountApplication;
+            
+            // Add to the data object
+            return {
+                ...item,
+                normallyDisplayed,
+                notDisplayed,
+                estimationCompleted,
+                totalSaved: item.saveButton + estimationCompleted,
+                // Calculate CVR (Conversion Rate)
+                cvr: item.displayButton > 0 ? (item.requestedAssessment / item.displayButton) * 100 : 0,
+                // Calculate display ratio
+                displayRatio: normallyDisplayed > 0 ? (notDisplayed / normallyDisplayed) * 100 : 0
+            };
+        }).filter(item => item.date !== '2025-03-08' && item.date !== '2025-03-07'); // Filter out dates with anomalous data
+        
+        // Sort data by date (ascending)
+        processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Aggregate data by week
+        const weeklyData = processedData.reduce((acc, item) => {
+            const date = new Date(item.date);
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const weekNum = Math.ceil(date.getDate() / 7);
+            const weekKey = `${year}-${month}-W${weekNum}`;
+            const weekLabel = `${month}月第${weekNum}週`;
+            
+            if (!acc[weekKey]) {
+                acc[weekKey] = {
+                    week: weekLabel,
+                    displayButton: 0,
+                    totalSaved: 0,
+                    requestedAssessment: 0,
+                    dates: []
+                };
+            }
+            
+            acc[weekKey].displayButton += item.displayButton;
+            acc[weekKey].totalSaved += item.totalSaved;
+            acc[weekKey].requestedAssessment += item.requestedAssessment;
+            acc[weekKey].dates.push(item.date);
+            
+            return acc;
+        }, {});
+        
+        // Convert to array and sort by date
+        const weeklyDataArray = Object.values(weeklyData).map(item => {
+            // Calculate the midpoint date of the week for sorting
+            const dates = item.dates.map(d => new Date(d));
+            const midDate = new Date(Math.min(...dates.map(d => d.getTime())));
+            return {
+                ...item,
+                midDate
+            };
+        }).sort((a, b) => a.midDate - b.midDate);
+        
+        // Calculate totals for KPI
+        const totals = processedData.reduce((acc, item) => {
+            acc.access += item.access;
+            acc.displayButton += item.displayButton;
+            acc.saveButton += item.saveButton;
+            acc.actuallySaved += item.actuallySaved;
+            acc.formalAssessment += item.formalAssessment;
+            acc.requestedAssessment += item.requestedAssessment;
+            acc.noAmountTransition += item.noAmountTransition;
+            acc.noAmountApplication += item.noAmountApplication;
+            acc.noOptionButton += item.noOptionButton;
+            acc.normallyDisplayed += item.normallyDisplayed;
+            acc.notDisplayed += item.notDisplayed;
+            acc.estimationCompleted += item.estimationCompleted;
+            acc.totalSaved += item.totalSaved;
+            return acc;
+        }, {
+            access: 0,
+            displayButton: 0,
+            saveButton: 0,
+            actuallySaved: 0,
+            formalAssessment: 0,
+            requestedAssessment: 0,
+            noAmountTransition: 0,
+            noAmountApplication: 0,
+            noOptionButton: 0,
+            normallyDisplayed: 0,
+            notDisplayed: 0,
+            estimationCompleted: 0,
+            totalSaved: 0
+        });
+        
+        // Calculate drop-off rates
+        const dropoffRates = [
+            { step: 'アクセス → 結果表示ボタン押下', rate: 100 - (totals.displayButton / totals.access * 100) },
+            { step: '結果表示ボタン押下 → 正常表示', rate: 100 - (totals.normallyDisplayed / totals.displayButton * 100) },
+            { step: '正常表示 → 保存ボタン押下', rate: 100 - (totals.saveButton / totals.normallyDisplayed * 100) },
+            { step: '保存ボタン押下 → 実際の保存', rate: 100 - (totals.actuallySaved / totals.saveButton * 100) },
+            { step: '実際の保存 → 正式査定進行', rate: 100 - (totals.formalAssessment / totals.actuallySaved * 100) },
+            { step: '正式査定進行 → 査定依頼', rate: 100 - (totals.requestedAssessment / totals.formalAssessment * 100) }
+        ];
+        
+        // Sort by highest drop-off rate first
+        dropoffRates.sort((a, b) => b.rate - a.rate);
+        
+        // Find the main bottleneck
+        const mainBottleneck = dropoffRates[0];
+        
+        // Get top 5 days by CVR
+        const top5Days = [...processedData]
+            .sort((a, b) => b.cvr - a.cvr)
+            .slice(0, 5);
+
+        // Simple AR model for prediction
+        function predictNextValues(data, lag = 3) {
+            // Get the time series
+            const timeSeries = data.map(d => d.displayButton);
+            const savedSeries = data.map(d => d.totalSaved);
+            const assessmentSeries = data.map(d => d.requestedAssessment);
+            
+            // Simple AR model implementation
+            const displayPredictions = [];
+            const savedPredictions = [];
+            const assessmentPredictions = [];
+            
+            // Predict next 7 days
+            for (let i = 0; i < 7; i++) {
+                // For display buttons
+                const lastValues = timeSeries.slice(timeSeries.length - lag);
+                const prediction = lastValues.reduce((sum, val) => sum + val, 0) / lag;
+                timeSeries.push(prediction);
+                displayPredictions.push(prediction);
+                
+                // For saved results
+                const lastSavedValues = savedSeries.slice(savedSeries.length - lag);
+                const savedPrediction = lastSavedValues.reduce((sum, val) => sum + val, 0) / lag;
+                savedSeries.push(savedPrediction);
+                savedPredictions.push(savedPrediction);
+                
+                // For assessment requests
+                const lastAssessmentValues = assessmentSeries.slice(assessmentSeries.length - lag);
+                const assessmentPrediction = lastAssessmentValues.reduce((sum, val) => sum + val, 0) / lag;
+                assessmentSeries.push(assessmentPrediction);
+                assessmentPredictions.push(assessmentPrediction);
+            }
+            
+            return {
+                displayPredictions,
+                savedPredictions,
+                assessmentPredictions
+            };
+        }
+        
+        // Generate future dates for prediction
+        function generateFutureDates(lastDate, days) {
+            const result = [];
+            const lastDateObj = new Date(lastDate);
+            
+            for (let i = 1; i <= days; i++) {
+                const newDate = new Date(lastDateObj);
+                newDate.setDate(lastDateObj.getDate() + i);
+                result.push(newDate.toISOString().split('T')[0]);
+            }
+            
+            return result;
+        }
+        
+        // Get predictions
+        const lastDate = processedData[processedData.length - 1].date;
+        const futureDates = generateFutureDates(lastDate, 7);
+        const predictions = predictNextValues(processedData);
+        
+        // Prepare data for the predictive chart
+        const predictiveData = {
+            labels: [...processedData.map(d => d.date).slice(-14), ...futureDates],
+            datasets: [
+                {
+                    label: '利用者数 (実績)',
+                    data: processedData.map(d => d.displayButton).slice(-14).concat(Array(7).fill(null)),
+                    borderColor: 'rgba(67, 97, 238, 1)',
+                    backgroundColor: 'rgba(67, 97, 238, 0.7)',
+                    borderWidth: 2,
+                    type: 'bar'
+                },
+                {
+                    label: '利用者数 (予測)',
+                    data: Array(14).fill(null).concat(predictions.displayPredictions),
+                    borderColor: 'rgba(67, 97, 238, 1)',
+                    backgroundColor: 'rgba(67, 97, 238, 0.3)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    type: 'bar'
+                },
+                {
+                    label: '結果保存数 (実績)',
+                    data: processedData.map(d => d.totalSaved).slice(-14).concat(Array(7).fill(null)),
+                    borderColor: 'rgba(56, 176, 0, 1)',
+                    backgroundColor: 'rgba(56, 176, 0, 0.7)',
+                    borderWidth: 2,
+                    type: 'line'
+                },
+                {
+                    label: '結果保存数 (予測)',
+                    data: Array(14).fill(null).concat(predictions.savedPredictions),
+                    borderColor: 'rgba(56, 176, 0, 1)',
+                    backgroundColor: 'rgba(56, 176, 0, 0.3)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    type: 'line'
+                },
+                {
+                    label: '正式査定依頼数 (実績)',
+                    data: processedData.map(d => d.requestedAssessment).slice(-14).concat(Array(7).fill(null)),
+                    borderColor: 'rgba(244, 140, 6, 1)',
+                    backgroundColor: 'rgba(244, 140, 6, 0.7)',
+                    borderWidth: 2,
+                    type: 'line'
+                },
+                {
+                    label: '正式査定依頼数 (予測)',
+                    data: Array(14).fill(null).concat(predictions.assessmentPredictions),
+                    borderColor: 'rgba(244, 140, 6, 1)',
+                    backgroundColor: 'rgba(244, 140, 6, 0.3)',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    type: 'line'
+                }
+            ]
+        };
+        
+        // Chart colors
+        const colorPrimary = '#4361ee';
+        const colorSecondary = '#7209b7';
+        const colorSuccess = '#38b000';
+        const colorWarning = '#f48c06';
+        const colorDanger = '#e5383b';
+        
+        // 1. KPI Chart
+        const kpiCtx = document.getElementById('kpiChart').getContext('2d');
+        const kpiChart = new Chart(kpiCtx, {
+            type: 'bar',
+            data: {
+                labels: ['利用者数', '結果保存数', '正式査定依頼数'],
+                datasets: [{
+                    label: '数値',
+                    data: [totals.displayButton, totals.totalSaved, totals.requestedAssessment],
+                    backgroundColor: [colorPrimary, colorSuccess, colorWarning],
+                    borderColor: [colorPrimary, colorSuccess, colorWarning],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y.toLocaleString();
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '人数'
+                        }
+                    }
+                },
+                maintainAspectRatio: false
+            }
+        });
+        
+        // 2. Process Flow Chart
+        const processCtx = document.getElementById('processChart').getContext('2d');
+        const processChart = new Chart(processCtx, {
+            type: 'bar',
+            data: {
+                labels: [
+                    '閲覧者数（アクセス数）', 
+                    '利用者数（結果表示ボタン押下）',
+                    '正常に結果表示できた数',
+                    '結果表示できなかった数',
+                    '結果保存ボタンを押した数',
+                    '概算完了数',
+                    '結果保存数',
+                    '正式査定移行数',
+                    '正式査定依頼数'
+                ],
+                datasets: [{
+                    label: '数値',
+                    data: [
+                        totals.access, 
+                        totals.displayButton, 
+                        totals.normallyDisplayed,
+                        totals.notDisplayed,
+                        totals.saveButton,
+                        totals.estimationCompleted,
+                        totals.totalSaved,
+                        totals.formalAssessment,
+                        totals.requestedAssessment
+                    ],
+                    backgroundColor: [
+                        'rgba(67, 97, 238, 0.3)',
+                        'rgba(67, 97, 238, 0.5)',
+                        'rgba(67, 97, 238, 0.7)',
+                        'rgba(114, 9, 183, 0.5)',
+                        'rgba(56, 176, 0, 0.5)',
+                        'rgba(114, 9, 183, 0.7)',
+                        'rgba(56, 176, 0, 0.7)',
+                        'rgba(244, 140, 6, 0.5)',
+                        'rgba(244, 140, 6, 0.7)'
+                    ],
+                    borderColor: [
+                        'rgba(67, 97, 238, 1)',
+                        'rgba(67, 97, 238, 1)',
+                        'rgba(67, 97, 238, 1)',
+                        'rgba(114, 9, 183, 1)',
+                        'rgba(56, 176, 0, 1)',
+                        'rgba(114, 9, 183, 1)',
+                        'rgba(56, 176, 0, 1)',
+                        'rgba(244, 140, 6, 1)',
+                        'rgba(244, 140, 6, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.x.toLocaleString();
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '人数'
+                        }
+                    }
+                },
+                maintainAspectRatio: false
+            }
+        });
+        
+        // 3. Drop-off Rate Chart
+        const dropoffCtx = document.getElementById('dropoffChart').getContext('2d');
+        const dropoffChart = new Chart(dropoffCtx, {
+            type: 'bar',
+            data: {
+                labels: dropoffRates.map(d => d.step),
+                datasets: [{
+                    label: '離脱率 (%)',
+                    data: dropoffRates.map(d => d.rate),
+                    backgroundColor: function(context) {
+                        const index = context.dataIndex;
+                        return index === 0 ? colorDanger : 'rgba(229, 56, 59, 0.7)';
+                    },
+                    borderColor: colorDanger,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '離脱率 (%)'
+                        }
+                    }
+                },
+                maintainAspectRatio: false
+            }
+        });
+        
+        // 4. Time Series Chart
+        const timeSeriesCtx = document.getElementById('timeSeriesChart').getContext('2d');
+        const timeSeriesChart = new Chart(timeSeriesCtx, {
+            type: 'line',
+            data: {
+                labels: weeklyDataArray.map(d => d.week),
+                datasets: [{
+                    label: '結果保存数',
+                    data: weeklyDataArray.map(d => d.totalSaved),
+                    borderColor: colorSuccess,
+                    backgroundColor: 'rgba(56, 176, 0, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }, {
+                    label: '正式査定依頼数',
+                    data: weeklyDataArray.map(d => d.requestedAssessment),
+                    borderColor: colorWarning,
+                    backgroundColor: 'rgba(244, 140, 6, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '件数'
+                        }
+                    }
+                },
+                maintainAspectRatio: false
+            }
+        });
+        
+        // 5. Populate Top 5 KPI List
+        const topKpiList = document.querySelector('.top-kpi-list');
+        top5Days.forEach(day => {
+            const li = document.createElement('li');
+            li.className = 'top-kpi-item';
+            
+            // Format date to "MM/DD"
+            const dateObj = new Date(day.date);
+            const formattedDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+            
+            li.innerHTML = `
+                <div class="kpi-item-date">${formattedDate}</div>
+                
+                <div>
+                    <span class="kpi-item-label">利用者数</span>
+                    <span class="kpi-item-value">${day.displayButton.toLocaleString()}</span>
+                </div>
+                
+                <div>
+                    <span class="kpi-item-label">結果表示割合</span>
+                    <span class="kpi-item-value ${day.displayRatio < 5 ? 'good' : day.displayRatio > 15 ? 'bad' : 'neutral'}">${day.displayRatio.toFixed(1)}%</span>
+                </div>
+                
+                <div>
+                    <span class="kpi-item-label">結果保存数</span>
+                    <span class="kpi-item-value">${day.totalSaved.toLocaleString()}</span>
+                </div>
+                
+                <div>
+                    <span class="kpi-item-label">正式査定依頼数</span>
+                    <span class="kpi-item-value">${day.requestedAssessment.toLocaleString()}</span>
+                </div>
+                
+                <div>
+                    <span class="kpi-item-label">正式査定依頼率</span>
+                    <span class="kpi-item-value ${day.cvr > 3 ? 'good' : day.cvr < 1 ? 'bad' : 'neutral'}">${day.cvr.toFixed(1)}%</span>
+                </div>
+            `;
+            
+            topKpiList.appendChild(li);
+        });
+        
+        // 6. Predictive Chart
+        const predictiveCtx = document.getElementById('predictiveChart').getContext('2d');
+        const predictiveChart = new Chart(predictiveCtx, {
+            type: 'bar',
+            data: predictiveData,
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: '件数'
+                        }
+                    }
+                },
+                maintainAspectRatio: false
+            }
+        });
+    </script>
+</body>
+</html>
